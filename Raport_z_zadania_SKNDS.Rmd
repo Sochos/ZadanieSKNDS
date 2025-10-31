@@ -1,0 +1,478 @@
+---
+title: "Zadanie SKNDS"
+author: "Wiktor Socha"
+date: "2025-10-27"
+output:
+  html_document:
+    toc: true
+    toc_float:
+      smooth_scroll: true
+  theme: paper
+  highlight: tango
+  pdf_document:
+    toc: true
+subtitle: Model predykcyjny zmiennej Price
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries1, message=FALSE, warning=FALSE, include=FALSE}
+library(dplyr)
+library(readxl)
+library(caTools)
+library(ggplot2)
+library(patchwork)
+library(gridExtra)
+library(tinytex)
+```
+
+# Opis
+
+-   Celem analizy/projektu było przygotowanie, oczyszczenie przesłanych danych, stworzenie modelu predykcyjnego dla zmiennej Price, wizualizacja danych oraz zawarcie wniosków/rekomendacji.
+
+-   Przed rozpoczęciem pracy dotyczącej diamentów, zapoznałem się z podmiotem analizy. Wyszukałem w internecie informacje dotyczące klasycznych cen, wag, czy też wymiarów diamentów aby wiedzieć, jakie dane ewentualnie odrzucić z naszego modelu predykcji. Na wstępie włączyłem excel, zapoznałem się z danymi, przefiltrowałem wartości budzące wątpliwości oraz wykryłem braki w wierszach.
+
+-   Następnie w Rstudio podjąłem kroki takie jak: ustalenie nierealistycznych wartości zmiennych, odpowiednie sformatowanie kolumn oraz usunięcie wierszy z brakami danych. Ponadto, przefiltrowałem dane zmiennych, tak aby pokazywały wyłącznie realne wartości: ustaliłem wartość dla masy karatowej (Carat) w przedziale 0.1-15, dla zmiennej (Depth) 40%-80%, dla zmiennej (Table) 40%-95%, ustaliłem dodatnią cenę bez ekstremów oraz dodatnie wymiary o realistycznych wartościach. Dzięki czynnościom powyżej otrzymałem wiarygodną podstawę do zbudowania modelu.
+
+-   Celem analizy jest nie tylko predykcja ceny, ale również identyfikacja czynników wpływających na jej poziom oraz ocena siły tego wpływu. Z tego powodu jako model bazowy zastosowano **regresję liniową**, charakteryzującą się wysoką interpretacyjnością.
+
+# Streszczenie
+
+-   Po oczyszczeniu danych, zbudowałem model regresji liniowej. Aby spełnić założenia metodologiczne, zmienne kluczowe (Price i Carat) zostały zlogarytmowane. Model wykazał się bardzo wysoką skutecznością, wyjaśniającą **98.2%** zmienności logarytmu ceny. Najważniejszymi czynnikami wpływającymi na cenę okazały się masa `log_carat`, czystość `clarity` i kolor `Color`. Zmienne opisujące proporcje diamentu (`Depth`, `Table`). okazały się statystycznie nieistotne.
+
+```{r libraries, message=FALSE, warning=FALSE, include=FALSE}
+install.packages("dplyr", repos = "https://cloud.r-project.org")
+install.packages("readxl", repos = "https://cloud.r-project.org")
+```
+
+```{r setting, message=FALSE, warning=FALSE, include=FALSE}
+getwd()
+install.packages("reade", repos = "https://cloud.r-project.org")
+install.packages("dplyr", repos = "https://cloud.r-project.org")
+
+setwd("/Users/wiktorsocha/Desktop")
+diamenty=read_excel("datasets.xlsx")
+```
+
+```{r cleaning, message=FALSE, warning=FALSE, include=FALSE}
+unrealistic_carats <- c(0.0001, 0.0111, 21, 85, 86, 91, 100, 321, 1022, 2121, 21212, 34241)
+
+diamenty_clean = diamenty %>%
+  
+mutate(cut = trimws(cut)) %>%
+  
+mutate(across(c(carat, depth, table, price, x, y, z), as.numeric)) %>%
+  
+filter(!is.na(carat) & !is.na(depth) & !is.na(table) & !is.na(price) & !is.na(x) & !is.na(y) & !is.na(z)) %>%
+  
+filter(carat > 0.1 & carat < 15 & !(carat %in% unrealistic_carats), depth > 40 & depth < 80, table > 40 & table < 95, price > 0 & price < 200000, x > 0 & y > 0 & z > 0 & x < 30 & y < 30 & z < 30 & z != 2121)
+
+cat("Liczba wierszy przed czyszczeniem:", nrow(diamenty), "\n")
+
+cat("Liczba wierszy po czyszczeniu:", nrow(diamenty_clean), "\n")
+```
+
+# 1. Czyszczenie danych, wstępna analiza zmiennych
+
+-   Na początku ustaliłem nierealistyczne wartości zmiennej Carat za pomocą komendy:
+
+`unrealistic_carats=c(0.0001, 0.0111, 21, 85, 86, 91, 100, 321, 1022, 2121, 21212, 34241)`
+
+-   W drugiej kolejności sformatowałem kolumny:
+
+`mutate(cut = trimws(cut)) %>% oraz mutate(across(c(carat, depth, table, price, x, y, z), as.numeric)) %>%`
+
+-   Następnie usunąłem wiersze z brakami danych:
+
+`filter(!is.na(carat) & !is.na(depth) & !is.na(table) & !is.na(price) & !is.na(x) & !is.na(y) & !is.na(z)) %>%`
+
+-   Oraz przefiltrowałem dane w taki sposób, aby pozostawały realne informacje, takie jak:
+
+    **Realistyczna masa karatowa (między 0.1 a 15)**
+
+    **Realistyczna wartość depth (40-80%)**
+
+    **Realistyczna wartość table (40-95%)**
+
+    **Realistyczna cena (dodatnia, bez ekstremow)**
+
+    **Realistyczne wymiary (dodatnie, z górnym sensownym limitem)**
+
+-   Po sprawdzeniu ilości wierszy bazy danych przed i po czyszczeniu (cleaningu), spora część oryginalnych danych została usunięta z powodu braków lub błędów:
+
+`Liczba wierszy przed czyszczeniem: 10050`
+
+`Liczba wierszy po czyszczeniu: 7566`
+
+-   Po wpisaniu komendy `summary(diamenty_clean)`, możemy wysnuć wstępną analizę mówiącą nam, że
+
+```{r, echo=FALSE}
+summary(diamenty_clean)
+```
+
+**Carat(Masa)**
+
+-   Większość diamentów w tym zbiorze jest stosunkowo mała (Mediana wynosi 0.7 karata, a średnia 0.8 karata)
+
+-   Ponadto, wyższa średnia od mediany wskazuje nam, że rozkład wykazuje prawostronną skośność - jest więcej mniejszych diamentów, ale obecność kilku większych "ciągnie" średnią w górę
+
+**Depth(Głębokość%)**
+
+-   Wartości zmiennej 'Depth' koncentrują się wokół średniej 61.78% i mediany 61.90%
+
+-   Oznacza to, że rozkład jest stosunkowo symetryczny
+
+**Table(Tabela)**
+
+-   Podobnie jak zmienna 'Depth', wartości skupiają się wokół średniej 57.44% i mediany 57.00%
+
+-   Rozkład jest lekko prawostronnie skośny
+
+**Price(Cena)**
+
+-   Ceny są mocno prawostronnie skośne. Mediana wynosi 2402\$, podczas gdy średnia to 3925\$. Oznacza to, że większość diamentów jest tańsza, ale istnieje grupa znacznie droższych kamieni, które zawyżają średnią.
+
+-   Najtańszy diament kosztuje 335\$, a najdroższy 18823\$. Połowa diamentów ma cenę w przedziale od 942\$ do 5282\$.
+
+**x,y,z(Wymiary)**
+
+-   Średnie i mediany dla 'x' i 'y' są bardzo zbliżone (ok. 5.73 mm), co jest oczekiwane dla większości szlifów. Wartość 'z' (głębokość w mm) jest mniejsza średnio o 3.54 mm
+
+-   Minimalna wartość 'z' (1.41 mm) niska w porównaniu do minimalnych 'x' i 'y' (ok. 3.8 mm)
+
+# 2. Budowa modelu
+
+```{r modelBuild, message=FALSE, warning=FALSE, include=FALSE}
+#d
+```
+
+## 2a. Wybór oraz przekształcenie zmiennych
+
+-   Do zbudowania modelu predykcyjnego zmiennej objaśnianej ‘Price’, użyłem zmiennych objaśniających ‘Carat’, 'Cut’, ‘Color’, ‘Clarity’, 'Depth', 'Table'.
+
+**Wybierając zmienne objaśniające, pominąłem zmienne z wymiarami '(z, y, z)', ponieważ założyłem, że są one bardzo silnie skorelowane ze zmienną 'Carat'. Dzięki temu uniknąłem problemu współliniowości.**
+
+-   Oraz sprawdziłem typy zmiennych kategorycznych a następnie przekształciłem zmienne na faktory z odpowiednim podziałem na klasy (od najgorszej do najlepszej jakości diamentów).
+
+**Wizualizacja rozkładu gęstości dla zmiennej 'Price'**
+
+Analizując grafikę, rozkład zmiennej price jest mocno prawostronnie skośny. Gdy zmienna zależna (price) jest tak skośna, istnieje ryzyko, że model nie będzie spełniać potrzebnych założeń.
+
+```{r wgestosci, message=FALSE, warning=FALSE, include=FALSE}
+p1 = ggplot(diamenty_clean, aes(x = price)) + geom_density(fill = "lightblue", alpha = 1) + scale_x_continuous(labels = scales::comma) + labs(title = "Rozkład Ceny Diamentów", x = "Cena ($)", y = "Gęstość") + theme_minimal()
+```
+
+```{r wgestosci_wiz, message=FALSE, warning=FALSE, include=TRUE}
+p1
+```
+
+-   W związku z tym, podjąłem decyzje o zlogarytmowaniu zmiennych price i carat:
+
+```{r modelData, message=FALSE, warning=FALSE, include=FALSE}
+set.seed(123)
+diamenty_model_data = diamenty_clean %>% 
+mutate(log_price = log(price), log_carat = log(carat))
+diamenty_model_data$split = sample.split(diamenty_model_data$log_price, SplitRatio = 0.75)
+```
+
+`diamenty_model_data = diamenty_clean %>% mutate(log_price = log(price), log_carat = log(carat))`
+
+## 2b. Podzielenie danych na zbiory oraz ustalenie ziarna losowości
+
+```{r trainData, message=FALSE, warning=FALSE, include=FALSE}
+install.packages("caTools", repos = "https://cloud.r-project.org")
+train_data = diamenty_model_data %>% filter(split == TRUE)
+test_data = diamenty_model_data %>% filter(split == FALSE)
+```
+
+-   Podzieliłem dane na zbiór treningowy (75%) i testowy (25%)
+
+`split = sample.split(diamenty_model_data$log_price, SplitRatio = 0.75)`
+
+`train_data = subset(diamenty_model_data, split == TRUE)`
+
+`test_data = subset(diamenty_model_data, split == FALSE)`
+
+`diamenty_model_data = diamenty_clean %>% mutate(log_price = log(price), log_carat = log(carat))`
+
+# 3. Model predykcji
+
+-   Zbudowałem model regresji liniowej logarytmu ze zmiennej ‘Price’ (log_Price) na podstawie log_Carat i pozostałych zmiennych ('Carat', 'Cut', 'Color', 'Clarity', 'Depth', 'Table')
+
+```{r defmodelu, message=FALSE, warning=FALSE, include=FALSE}
+model = lm(log_price ~ log_carat + cut + color + clarity + depth + table, data = train_data)
+```
+
+`model = lm(log_price ~ log_carat + cut + color + clarity + depth + table, data = train_data)`
+
+-   Oraz dokonałem analizy informacji dotyczących modelu (współczynniki, istotność, R-kwadrat)
+
+`summary(model)`
+
+```{r, echo=FALSE}
+summary(model)
+```
+
+-   Na podstawie tego modelu regresji liniowej możemy stwierdzić, że:
+
+**log_carat (Masa):**
+
+Logarytm masy ma **najsilniejszy** wpły na logarytm ceny (zależność log vs log). Oznacza to, że wzrost masy diamentu o **1%** jest związany ze wzrostem jego ceny średnio **o ok. 1.87%** ceteris paribus
+
+**depth (Głębokość) i table:**
+
+Wartości P-value zmiennych depth i table wynoszą kolejno **(0.290 i 0.199).** Oznacza to, że na podstawie tych danych nie możemy stwierdzić, żeby miały one jakiekolwiek realny wpływ na cenę.
+
+**cut (Szlif):**
+
+Bazując na powyższej informacji, cena diamentu rośnie, im "lepszy" szlif:
+
+W porównaniu do szlifu 'Fair', cena rośnie:
+
+-   cutIdeal (Idealny szlif): **o ok. 18.6%** *(ponieważ e 0.1707 ≈1.186).*
+
+-   cutPremium (Premium): **o ok. 16.6%** *(e 0.1535 ≈1.166).*
+
+-   cutVery Good (Bardzo Dobry): **o ok. 13.6%** *(e 0.1277 ≈1.136).*
+
+-   cutGood (Dobry): **o ok. 9.0%** *(e 0.0866 ≈1.090).*
+
+**color (Kolor):**
+
+Cena różni się w zależności od koloru (im gorszy kolor, tym niższa cena):
+
+-   colorE: spadek **o ok. 4.6%** *(e −0.0473 ≈0.954).*
+
+-   colorG: spadek **o ok. 14.2%** *(e −0.1531 ≈0.858).*
+
+-   colorJ (najgorszy w zestawieniu): spadek **o ok. 39.7%** *(e −0.5057 ≈0.603).*
+
+**clarity (Czystość):**
+
+Cena rośnie w zależności od tego, jak 'czysty' jest diament:
+
+-   claritySI2: wzrost **o ok. 53.4%** *(e 0.4275 ≈1.534).*
+
+-   clarityVS2: wzrost **o ok. 110.6%** *(e 0.7445 ≈2.106).*
+
+-   clarityIF (najlepsza): wzrost **o ok. 202.5%** *(e 1.1072 ≈3.025).* Diament o czystości IF jest średnio ponad 3 razy droższy niż diament I1 ceteris paribus.
+
+**R-kwadrat wynosi: 0.9824 a skorygowany R-kwadrat wynosi: 0.9823.**
+
+-   Oznacza to, że model ten (uwzględniający logarytm karatów, szlif, kolor, czystość, głębokość i taflę) jest w stanie wyjaśnić aż 98,24% zmienności w logarytmie ceny diamentów. Wskazuje on na bardzo silne dopasowanie modelu do danych.
+
+**Skorygowany R-kwadrat jest bardzo bliski wartości 1, co potwierdza, że model nie jest "przeładowany" zbędnymi zmiennymi**
+
+-   Dodatkowo, ogólny test F-statistic ma p-value (\< 2.2e-16), co oznacza, że model jako całość jest bardzo istotny statystycznie (przynajmniej jeden predyktor jest istotnie powiązany z ceną)
+
+-   Oprócz tego, poziomy zmiennych 'Cut' (szlif), 'Color' (kolor) i 'Clarity' (czystość). Ich p-value jest ekstremalnie małe (\< 2e-16), co oznacza, że ich związek z logarytmem ceny jest bardzo silny.
+
+-   Jeśli chodzi o, p-value dla zmiennych depth (0.343) oraz table (0.154). Obie te wartości są znacznie wyższe niż standardowy próg istotności (np. α=0.05). Oznacza to, że w tym modelu, przy uwzględnieniu pozostałych zmiennych, depth (głębokość) i table (tafla) są statystycznie nieistotne.
+
+-   Z tabeli można również wywnioskować, że zmienna ‘log_Carat’ to najważniejszy predyktor. Wartość 1.873444 w kolumnie Estimate oznacza, że wzrost logarytmu karatów o 1 jednostkę wiąże się ze wzrostem logarytmu ceny średnio o około 1.87 ceteris paribus. (Większe diamenty są droższe)
+
+```{r predictions, message=FALSE, warning=FALSE, include=FALSE}
+predictions_log = predict(model, newdata = test_data)
+```
+
+## 3a. Sprawdzenie jakości modelu
+
+```{r rmse, message=FALSE, warning=FALSE, include=FALSE}
+rmse_log=sqrt(mean((test_data$log_price - predictions_log)^2))
+cat("RMSE (dla log_price):", rmse_log, "\n")
+```
+
+-   Aby sprawdzić jakość modelu dokonałem predykcji na zbiorze testowym:
+
+`predictions_log = predict(model, newdata = test_data)`
+
+-   Wyliczyłem RMSE dla logarytmu ceny (średnia oczekiwana różnica miedzy wartością przewidywaną a rzeczywistą)
+
+`rmse_log=sqrt(mean((test_data$log_price - predictions_log)^2))`
+
+`cat("RMSE (dla log_price):", rmse_log, "\n")`
+
+```{r, echo=FALSE}
+cat("RMSE (dla log_price):", rmse_log, "\n")
+```
+
+-   Wartość RMSE (dla log_price): 0.1343203 oznacza, że standardowe odchylenie błędów prognozy modelu wynosi 0.1343. Jesto to miara tego, jak bardzo "przeciętnie" przewidywania modelu dotyczące logarytmu ceny różnią się od rzeczywistego logarytmu ceny. RMSE na poziomie 0.1343 dla log_price to bardzo dobry wynik przy R-kwadrat wynoszący 98%. Oznacza on, że model jest nie tylko dobrze dopasowany, ale jego błędy predykcji są relatywnie małe (13-14%).
+
+-   Oraz obliczyłem R-kwadrat dla zbioru testowego
+
+```{r R2, message=FALSE, warning=FALSE, include=FALSE}
+sse = sum((test_data$log_price - predictions_log)^2)
+sst = sum((test_data$log_price - mean(test_data$log_price))^2)
+r_squared_test = 1 - sse/sst
+```
+
+`sse = sum((test_data$log_price - predictions_log)^2)`
+
+`sst = sum((test_data$log_price - mean(test_data$log_price))^2)`
+
+`r_squared_test = 1 - sse/sst`
+
+`cat("R-kwadrat (na zbiorze testowym):", r_squared_test, "\n")`
+
+```{r, echo=FALSE}
+cat("R-kwadrat (na zbiorze testowym):", r_squared_test, "\n")
+```
+
+-   Wartość R-kwadrat (0.9828489) pokazuje, jak dobrze model radzi sobie z prognozowaniem na nowych, niewidzianych wcześniej danych. Dzięki niej, możemy sprawdzić, czy model nie uległ przeuczeniu. Co ma miejsce, gdy model zbyt dobrze "zapamiętał" dane treningowe, ale traci zdolność do prognozowania na nowych danych. Wartość 98,28% oznacza, że model jest w stanie wyjaśnić 98,28% zmienności ‘log_price’ w zbiorze testowym, na **nowych** danych.
+
+-   Po czym zwizualizowałem rzeczywiste vs przewidywane wartości (w skali logarytmicznej)
+
+Aby wizualnie ocenić jakość i wiarygodność modelu na danych, których nigdy nie „widział”, zrobiłem wykres na zbiorze testowym. Dzięki temu sprawdziłem, czy model jest "dobry".
+
+```{r Plot, message=FALSE, warning=FALSE, include=FALSE}
+plot_data=data.frame(Actual=test_data$log_price, Predicted=predictions_log)
+```
+
+```{r, echo=FALSE}
+ggplot(plot_data, aes(x = Actual, y = Predicted)) + geom_point(alpha = 0.5) + geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") + labs(title = "Rzeczywiste vs Przewidywane log(cena) na zbiorze testowym", x = "Rzeczywiste log(cena)", y = "Przewidywane log(cena)") + theme_minimal() + coord_fixed()
+```
+
+-   Na wykresie widać, że model jest bardzo precyzyjny, (wartości przewidywane ją bardzo bliskie wartościom rzeczywistym). Dodatkowo, punkty są rozłożone równomiernie po obu stronach czerwonej linii. Nie widać, aby model systematycznie zawyżał (punkty pod linią) lub zaniżał (punkty nad linią) prognozy. Oprócz, tego, wykres potwierdza nam wartość R-kwadrat. Gdyby R-kwadrat był niski, punkty tworzyłyby luźną, rozproszoną „chmurę”. Tak ciasne skupienie wokół linii jest typowe dla R-kwadrat przekraczającego 98%.
+
+## 3b. Wizualizacja danych i prezentacja wyników
+
+```{r modelVisualisaiton, message=FALSE, warning=FALSE, include=FALSE}
+#f
+```
+
+Warto zwrócić uwagę na fakt, że zlogarytmowanie zmiennej 'Price', sprawia, że model jest o wiele bardziej dopasowany do założeń statystyczych. Po samym porównaniu dwóch wykresów możemy dojść do wniosku, że rozkład jest znacznie bardziej symetryczny oraz jej wariancja jest bardziej stabilna niż w przypadku modelu z niezlogarytmowaną zmienną 'Price':
+
+```{r P1_P2, message=FALSE, warning=FALSE, include=FALSE}
+p1 = ggplot(diamenty_clean, aes(x = price)) + geom_density(fill = "lightblue", alpha = 0.7) + scale_x_continuous(labels = scales::comma) + labs(title = "Rozkład Ceny Diamentów", x = "Cena ($)", y = "Gęstość") + theme_minimal()
+
+p2 = ggplot(diamenty_model_data, aes(x = log_price)) + geom_density(fill = "lightgreen", alpha = 0.7) + labs(title = "Rozkład Logarytmu Ceny", x = "Log(Cena)", y = "Gęstość") + theme_minimal()
+
+```
+
+```{r, echo=FALSE}
+grid.arrange(p1, p2, ncol = 2)
+```
+
+```{r P_zmienne, message=FALSE, warning=FALSE, include=FALSE}
+p_carat=ggplot(diamenty_model_data, aes(x = log_carat, y = log_price)) + geom_point(alpha = 0.1) + labs(title = "Log(Cena) vs Log(Karat)", x = "Log(Karat)", y = "Log(Cena)") + theme_minimal()
+
+p_cut=ggplot(diamenty_model_data, aes(x = cut, y = log_price, fill = cut)) + geom_boxplot() + labs(title = "Log(Cena) vs Szlif", x = "Szlif", y = "Log(Cena)") + theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p_color=ggplot(diamenty_model_data, aes(x = color, y = log_price, fill = color)) + geom_boxplot() + labs(title = "Log(Cena) vs Kolor", x = "Kolor", y = "Log(Cena)") + theme_minimal()
+
+p_clarity=ggplot(diamenty_model_data, aes(x = clarity, y = log_price, fill = clarity)) + geom_boxplot() + labs(title = "Log(Cena) vs Czystość", x = "Czystość", y = "Log(Cena)") + theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+-   Po zlogarytmowaniu zmiennej 'Price', przeszedłem do analizy wpływu poszczeóglnych zmiennych (Carat, Cut, Color, Clarity), które również zlogarytmowałem. Na załączonej grafice, można zauważyć że wszystkie analizowane cechy diamentu, mają wyraźny i statystycznie istotny wpływ na cenę diamentu.
+
+```{r, echo=FALSE}
+((p_carat | p_cut)/(p_color | p_clarity))
+```
+
+**Log(Price) vs Log(Carat)**
+
+-   Na wykresie widzimy bardzo silną pozytywną i wyraźnie liniową zależność między logarytmem masy (Log_carat), a logarytmem ceny. Punkty układają się w ciasny, rosnący pas. Masa diamentu jest kluczowym elementem wpływającym na cenę. Zastosowanie transformacji log-log "wyprostowało" zależność, co sugeruje, że w oryginalnej skali zależność jest wykładnicza (tzn. cena rośnie szybciej niż liniowo wraz ze wzrostem masy).
+
+**Log(Price) vs Cut**
+
+-   Zależność jest bardziej złożona i nieoczywista. Wbrew intuicji, szlif "Ideal" (uważany za najlepszy) ma jedną z niższych median cen, niższą niż "Premium" czy "Very Good". Najgorszy szlif ("Fair") również ma relatywnie wysoką medianę ceny. Ten wykres jest klasycznym przykładem wpływu zmiennej zakłócającej (confounding variable).
+
+**Log(Price) vs Color**
+
+-   Widzimy bardzo wyraźny, trend spadkowy. Mediana ceny (środkowa linia w pudełku) systematycznie spada, przechodząc od koloru "D" (najlepszy, bezbarwny) do "J" (najgorszy, żółtawy). Zauważamy, że kolor ma silny, przewidywalny i negatywny wpływ na cenę. Im "gorszy" (bardziej żółty) kolor, tym diament jest tańszy, przy zachowaniu tych samych pozostałych parametrów.
+
+**Log(Price) vs Clarity**
+
+-   Można zauważyć silny, pozytywny wpływ czystości na cenę. Najgorsza kategoria ("I1" - Included 1) ma zdecydowanie najniższą medianę ceny. Następnie ceny rosną wraz z kolejnymi kategoriami (SI2, SI1 -\> VS2, VS1 -\> VVS2, VVS1 -\> IF - Internally Flawless). Im diament "czystszy" (mniej inkluzji), tym wyższa jego cena. Warto też zauważyć dużą liczbę punktów odstających zwłaszcza przy gorszych klasach czystości, co sugeruje, że duży karat może "ratować" cenę nawet przy słabej czystości.
+
+## 3c. Weryfikacja założeń modelu i analiza reszt
+
+-   Po zbudowaniu modelu kluczowe jest sprawdzenie, czy jego założenia zostały spełnione. W tym celu przeanalizowano reszty (różnice między wartością rzeczywistą a przewidywaną) na zbiorze testowym.
+
+-   **Liniowość i Homoskedastyczność**
+
+```{r residuals, message=FALSE, warning=FALSE, include=FALSE}
+test_data$fitted_log_price=predict(model, newdata = test_data)
+test_data$residuals=test_data$log_price - test_data$fitted_log_price
+p_residuals = ggplot(test_data, aes(x = fitted_log_price, y = residuals)) + geom_point(alpha = 0.3) + geom_hline(yintercept = 0, color = "red", linetype = "dashed") + labs(title = "Reszty vs Dopasowane Wartości (zbiór testowy)", x = "Dopasowane Log(Cena)", y = "Reszty") + theme_minimal()
+```
+
+```{r, echo=FALSE}
+p_residuals
+```
+
+**Liniowość:** Punkty są rozproszone losowo wokół czerwonej, przerywanej linii (bezkształtna, losowa chmura punktów), dzięki czemu możemy uznać, że założenie o liniowości jest spełnione.
+
+**Stała wariancja:** (Homoskedastyczność): Grubość chmury punktów jest stała na całej osi X, co oznacza brak problemu heteroskedastyczności modelu
+
+**Braku systematycznego błędu:** Chmura punktów jest równomiernie rozłożona powyżej i poniżej linii y=0. Oznacza to, że model nie ma tendencji do zawyżania ani zaniżania cen. Wykres ten potwierdził, że zbudowany model dostarczył mocnych dowodów na to, że jest dobrze dopasowany i poprawnie generalizuje nowe dane.
+
+-   Normalność rozkładu reszt
+
+Aby sprawdzić, czy błędy modelu rozkładają się losowo (zgodnie z rozkładem normalnym), stworzono histogram reszt oraz wykres kwantylowy.
+
+-   Histogram reszt
+
+```{r norm_reszt, message=FALSE, warning=FALSE, include=FALSE}
+p_hist_res = ggplot(test_data, aes(x = residuals)) +
+  geom_histogram(aes(y = ..density..), binwidth = 0.05, fill = "lightblue", color = "black") +
+  stat_function(fun = dnorm, args = list(mean = mean(test_data$residuals), sd = sd(test_data$residuals)), color = "red", size = 1) +
+  labs(title = "Histogram reszt", x = "Reszty", y = "Gęstość") +
+  theme_minimal()
+```
+
+```{r norm_reszt_wiz, message=FALSE, warning=FALSE, include=TRUE}
+p_hist_res
+```
+
+**Model jest poprawny metodologicznie, ponieważ jego błędy (reszty) przypominają rozkład normalny.**
+
+-   Wykres kwantylowy
+
+```{r wyk_kwantylowy, message=FALSE, warning=FALSE, include=FALSE}
+p_qq_res = ggplot(test_data, aes(sample = residuals)) + stat_qq() + stat_qq_line() + labs(title = "Wykres Q-Q dla reszt", x = "Kwantyle teoretyczne", y = "Kwantyle z próbki") + theme_minimal()
+```
+
+```{r wyk_kwantylowy_wiz, message=FALSE, warning=FALSE, include=TRUE}
+p_qq_res
+```
+
+**Punkty leżą niemalże idealnie na prostej linii. Oznacza to, że błędy w modelu zachowują się tak, jak powinny (potwierdzenie o normalności błędów)**.
+
+-   Oba wykresy potwierdzają, że założenie o normalności rozkładu reszt jest spełnione. Z połączeniem z brakiem wzorców na wykresie reszt vs dopasowanie, możemy uznać model za poprawny metodologicznie.
+
+# 4. Wyniki i wnioski
+
+**Na podstawie przeprowadzonej analizy danych i zbudowanego modelu można wysnuć następujące wnioski:**
+
+-   Bardzo wysoka skuteczność modelu: Zbudowany model regresji liniowej, jest wysoce skuteczny. Osiągnięty współczynnik $R^2$ na poziomie **0.9824** oznacza, że model wyjaśnia aż **98,24%** zmienności w logarytmie ceny diamentów.
+
+-   Model nie jest przeuczony: Uzyskany $R^2$ na danych testowych (0.9828) jest niemal identyczny z wynikiem na zbiorze treningowym. Dowodzi to, że model potrafi precyzyjnie przewidywać ceny nowych, nieznanych wcześniej danych.
+
+-   Wysoka precyzja: Niski poziom błędu RMSE dla logarytmu ceny **(0.1343)** potwierdza, że prognozy modelu są bliskie wartościom rzeczywistym.
+
+-   Transformacja danych: Zlogarytmowanie zmiennych price i carat była potrzebna dla sukcesu modelu. Jak pokazały wykresy (rozkładu ceny oraz p_carat), przekształcenie to ustabilizowało wariancję (rozwiązało problem heteroskedastyczności) i "wyprostowało" zależność, umożliwiając skuteczne zastosowanie regresji liniowej.
+
+-   Spełnienie założeń statystycznych: Analiza reszt (wykres "Reszty vs Dopasowane Wartości") potwierdziła, że błędy modelu są losowe, pozbawione wzorców i skupione wokół zera. Świadczy to o poprawności metodologicznej modelu i spełnieniu założeń regresji liniowej.
+
+**Zmienne o największym i najmniejszym wpływie na ceny diamentów**
+
+-   Analiza istotności współczynników modelu *(summary(model))* oraz wizualizacje (wykresy pudełkowe i rozrzutu) pozwoliły precyzyjnie określić, które cechy diamentu mają największy, a które najmniejszy wpływ na jego cenę.
+
+**Zmienne o największym wpływie**
+
+-   log_Carat (Masa): Jest to najważniejszy predyktor ceny *(p-value \< 2.2e-16)*. Wykres Log(Cena) vs Log(Karat) pokazał bardzo silną, dodatnią zależność liniową w skali logarytmicznej.
+
+-   Color (Kolor): Zmienna o bardzo silnym wpływie *(p-value \< 2.2e-16)*. Wykres pudełkowy wyraźnie zilustrował negatywną korelację – im "gorszy" kolor (bliżej 'J'), tym cena jest systematycznie niższa ceteris paribus.
+
+-   Clarity (Czystość): Kolejny istotny czynnik *(p-value \< 2.2e-16)*. Zaobserwowano silny trend pozytywny – cena rośnie wraz z poprawą klasy czystości (od 'I1' do 'IF').
+
+-   Cut (Szlif): Szlif również jest zmienną o wysokiej istotności statystycznej *(p-value \< 2.2e-16)*. Jego wpływ jest jednak bardziej złożony, co pokazał wykres Log(Cena) vs Szlif, gdzie mediana ceny dla szlifu "Ideal" była niższa niż dla "Premium", co sugeruje interakcje z innymi zmiennymi (np. masą).
+
+**Zmienne o najmniejszym (nieistotnym) wpływie**
+
+-   Depth: Wartość p-value dla tej zmiennej wyniosła *0.343*. Jest to wartość znacznie powyżej progu *0.05*, co oznacza, że depth jest statystycznie nieistotna w tym modelu.
+
+-   Table: Podobnie jak depth, zmienna ta uzyskała wysokie p-value *(0.154)*, co również czyni ją statystycznie nieistotną.
