@@ -67,7 +67,12 @@ library(ggplot2)
 
 #Ustalenie kolejności poziomów zmiennych, od najgorszej do najlepszej jakości diamentów
 
-diamenty_clean = diamenty_clean %>% mutate(cut = factor(cut, levels = c("Fair", "Good", "Very Good", "Premium", "Ideal"), ordered = TRUE), color = factor(color, levels = c("J", "I", "H", "G", "F", "E", "D"), ordered = TRUE), clarity = factor(clarity, levels = c("I1", "SI2", "SI1", "VS2", "VS1", "VVS2", "VVS1", "IF"), ordered = TRUE)
+diamenty_clean = diamenty_clean %>%
+  mutate(
+    cut = factor(cut, levels = c("Fair", "Good", "Very Good", "Premium", "Ideal"), ordered = TRUE),
+    color = factor(color, levels = c("J", "I", "H", "G", "F", "E", "D"), ordered = TRUE),
+    clarity = factor(clarity, levels = c("I1", "SI2", "SI1", "VS2", "VS1", "VVS2", "VVS1", "IF"), ordered = TRUE)
+  )
 
 #Transformacja logarytmiczna zmiennych price i carat
 
